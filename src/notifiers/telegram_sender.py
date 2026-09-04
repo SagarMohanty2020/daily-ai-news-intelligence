@@ -31,9 +31,16 @@ SENTIMENT_ICONS = {
 
 class TelegramSender:
     def __init__(self, bot_token: str, chat_id: str):
-        self.bot_token = bot_token
-        # Telegram channel username requires leading @ if not an ID
-        self.chat_id = f"@{chat_id}" if not chat_id.startswith(("@", "-")) and not chat_id.lstrip("-").isdigit() else chat_id
+        # Strip potential accidental whitespace or quotes
+        self.bot_token = bot_token.strip().strip("'\"") if bot_token else ""
+        raw_chat = chat_id.strip().strip("'\"") if chat_id else ""
+        
+        # If numeric ID (like -100xxx), keep as-is; otherwise ensure leading @
+        if raw_chat.startswith("-") or raw_chat.isdigit():
+            self.chat_id = raw_chat
+        else:
+            self.chat_id = f"@{raw_chat.lstrip('@')}" if raw_chat else ""
+
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
 
     def format_briefing(self, all_analyzed: Dict[str, List[AnalyzedArticle]]) -> List[str]:
@@ -87,11 +94,11 @@ class TelegramSender:
     def send_briefing(self, all_analyzed: Dict[str, List[AnalyzedArticle]]) -> bool:
         """Sends briefing chunks sequentially to Telegram."""
         if not self.bot_token:
-            logger.error("? TELEGRAM_BOT_TOKEN secret is empty!")
+            logger.error("? TELEGRAM_BOT_TOKEN secret is missing or empty in GitHub Secrets!")
             raise ValueError("TELEGRAM_BOT_TOKEN is missing in environment variables.")
 
         if not self.chat_id:
-            logger.error("? TELEGRAM_CHAT_ID is empty!")
+            logger.error("? TELEGRAM_CHAT_ID secret is missing or empty in GitHub Secrets!")
             raise ValueError("TELEGRAM_CHAT_ID is missing in environment variables.")
 
         chunks = self.format_briefing(all_analyzed)
@@ -109,6 +116,8 @@ class TelegramSender:
             resp = requests.post(self.base_url, json=payload, timeout=15)
             if resp.status_code != 200:
                 logger.error(f"? Telegram API Error: HTTP {resp.status_code} - {resp.text}")
+                if resp.status_code == 404:
+                    logger.error("?? Reason for 404: TELEGRAM_BOT_TOKEN is invalid, has a typo, or contains extra spaces/quotes.")
                 raise RuntimeError(f"Telegram dispatch failed: {resp.status_code} - {resp.text}")
             
             logger.info(f"? Chunk {idx} successfully posted to Telegram.")
