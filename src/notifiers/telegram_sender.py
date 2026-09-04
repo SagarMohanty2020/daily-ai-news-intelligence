@@ -1,6 +1,6 @@
 """
 Telegram Dispatcher.
-Formats categorized news into clean Markdown messages and posts to Telegram channel
+Formats categorized news into clean HTML messages and posts to Telegram channel
 with automatic message chunking (4096-character limit) and rate-limiting safeguards.
 """
 import datetime
@@ -86,12 +86,16 @@ class TelegramSender:
 
     def send_briefing(self, all_analyzed: Dict[str, List[AnalyzedArticle]]) -> bool:
         """Sends briefing chunks sequentially to Telegram."""
-        if not self.bot_token or not self.chat_id:
-            logger.warning("Telegram Bot Token or Chat ID not configured. Skipping telegram dispatch.")
-            return False
+        if not self.bot_token:
+            logger.error("? TELEGRAM_BOT_TOKEN secret is empty!")
+            raise ValueError("TELEGRAM_BOT_TOKEN is missing in environment variables.")
+
+        if not self.chat_id:
+            logger.error("? TELEGRAM_CHAT_ID is empty!")
+            raise ValueError("TELEGRAM_CHAT_ID is missing in environment variables.")
 
         chunks = self.format_briefing(all_analyzed)
-        success = True
+        logger.info(f"Targeting Telegram Chat: {self.chat_id}")
 
         for idx, chunk in enumerate(chunks, 1):
             logger.info(f"Dispatching Telegram message chunk {idx}/{len(chunks)} to {self.chat_id}...")
@@ -102,17 +106,12 @@ class TelegramSender:
                 "disable_web_page_preview": True
             }
 
-            try:
-                resp = requests.post(self.base_url, json=payload, timeout=15)
-                if resp.status_code == 200:
-                    logger.info(f"Chunk {idx} sent successfully.")
-                else:
-                    logger.error(f"Failed to send chunk {idx}: {resp.status_code} - {resp.text}")
-                    success = False
-            except Exception as e:
-                logger.error(f"Telegram dispatch exception: {e}")
-                success = False
+            resp = requests.post(self.base_url, json=payload, timeout=15)
+            if resp.status_code != 200:
+                logger.error(f"? Telegram API Error: HTTP {resp.status_code} - {resp.text}")
+                raise RuntimeError(f"Telegram dispatch failed: {resp.status_code} - {resp.text}")
+            
+            logger.info(f"? Chunk {idx} successfully posted to Telegram.")
+            time.sleep(1)
 
-            time.sleep(1)  # avoid rate limit
-
-        return success
+        return True
