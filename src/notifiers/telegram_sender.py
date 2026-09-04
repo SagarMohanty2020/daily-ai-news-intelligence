@@ -60,7 +60,7 @@ class TelegramSender:
 
             for art in articles:
                 sentiment_str = SENTIMENT_ICONS.get(art.sentiment, art.sentiment)
-                bullet_points = "\n".join([f"  • {b}" for b in art.bullet_summary])
+                bullet_points = "\n".join([f"  â€¢ {b}" for b in art.bullet_summary])
                 
                 art_block = (
                     f"\n?? <b><a href='{art.source_url}'>{art.title}</a></b>\n"
